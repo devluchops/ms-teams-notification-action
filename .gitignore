@@ -1,0 +1,23 @@
+# IDE / editors
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local environment files
+.env
+.env.local
+
+# Temporary files
+*.tmp
+*.temp
+
+# OpenCode internal files
+.opencode/

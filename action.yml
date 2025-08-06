@@ -1,0 +1,64 @@
+name: 'MS Teams Notification'
+description: 'Send notifications to Microsoft Teams channels from GitHub Actions'
+author: 'DevLuchOps'
+branding:
+  icon: 'message-circle'
+  color: 'blue'
+inputs:
+  webhook_url:
+    description: 'Microsoft Teams webhook URL'
+    required: true
+  title:
+    description: 'Notification title'
+    required: true
+  message:
+    description: 'Main notification message'
+    required: true
+  url:
+    description: 'URL to link in the notification'
+    required: false
+  creator:
+    description: 'Person who triggered the event'
+    required: false
+    default: ${{ github.actor }}
+  repo_name:
+    description: 'Repository name'
+    required: false
+    default: ${{ github.repository }}
+  workflow_url:
+    description: 'Workflow run URL'
+    required: false
+    default: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  mention_user:
+    description: 'Mention user in Teams (email or Teams user ID)'
+    required: false
+  status:
+    description: 'Status of the event (success, failure, in_progress)'
+    required: false
+    default: 'success'
+  theme_color:
+    description: 'Theme color for the Teams message card (hex without #)'
+    required: false
+  dry_run:
+    description: 'If true, only prints the payload without sending the notification'
+    required: false
+    default: 'false'
+runs:
+  using: 'composite'
+  steps:
+    - name: Send Teams Notification
+      shell: bash
+      env:
+        TEAMS_WEBHOOK_URL: ${{ inputs.webhook_url }}
+        TITLE: ${{ inputs.title }}
+        MESSAGE: ${{ inputs.message }}
+        URL: ${{ inputs.url }}
+        CREATOR: ${{ inputs.creator }}
+        REPO_NAME: ${{ inputs.repo_name }}
+        WORKFLOW_URL: ${{ inputs.workflow_url }}
+        MENTION_USER: ${{ inputs.mention_user }}
+        STATUS: ${{ inputs.status }}
+        THEME_COLOR: ${{ inputs.theme_color }}
+        DRY_RUN: ${{ inputs.dry_run }}
+      run: |
+        "${{ github.action_path }}/send-notification.sh"

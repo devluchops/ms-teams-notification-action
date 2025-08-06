@@ -1,0 +1,219 @@
+#!/bin/bash
+
+set -euo pipefail
+
+# Validate required inputs
+if [[ -z "${TEAMS_WEBHOOK_URL:-}" ]]; then
+    echo "::error::webhook_url is required"
+    exit 1
+fi
+
+if [[ -z "${TITLE:-}" ]]; then
+    echo "::error::title is required"
+    exit 1
+fi
+
+if [[ -z "${MESSAGE:-}" ]]; then
+    echo "::error::message is required"
+    exit 1
+fi
+
+# Set defaults
+STATUS="${STATUS:-success}"
+DRY_RUN="${DRY_RUN:-false}"
+
+# Validate webhook URL format (allow example URLs for testing)
+if [[ ! "$TEAMS_WEBHOOK_URL" =~ ^https://.* ]]; then
+    echo "::error::Invalid webhook URL format. Must be HTTPS"
+    exit 1
+fi
+
+# Validate status
+case "$STATUS" in
+    success|failure|in_progress) ;;
+    *) echo "::error::Invalid status. Must be: success, failure, or in_progress"; exit 1 ;;
+esac
+
+# Escape JSON strings
+escape_json() {
+    echo "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'
+}
+
+# Get theme color based on status
+get_theme_color() {
+    if [[ -n "${THEME_COLOR:-}" ]]; then
+        echo "$THEME_COLOR"
+    else
+        case "$STATUS" in
+            success) echo "00cc00" ;;
+            failure) echo "ff0000" ;;
+            in_progress) echo "ffcc00" ;;
+            *) echo "0076D7" ;;
+        esac
+    fi
+}
+
+# Build Teams payload - using MessageCard format (better webhook support)
+build_payload() {
+    local title_escaped message_escaped
+    title_escaped=$(escape_json "$TITLE")
+    
+    # Build message with mention format for Adaptive Cards
+    local final_message="$MESSAGE"
+    local mention_entities=""
+    
+    if [[ -n "${MENTION_USER:-}" ]]; then
+        # Parse MENTION_USER format: "TYPE:ID|NAME" or just "NAME"
+        if [[ "$MENTION_USER" == *":"* ]]; then
+            local mention_type="${MENTION_USER%%:*}"
+            local mention_rest="${MENTION_USER#*:}"
+            local mention_id="${mention_rest%%|*}"
+            local mention_name="${mention_rest##*|}"
+            
+            case "$mention_type" in
+                "user")
+                    final_message="<at>$mention_name</at> $MESSAGE"
+                    mention_entities='"entities": [{"type": "mention", "text": "<at>'$mention_name'</at>", "mentioned": {"id": "8:orgid:'$mention_id'", "name": "'$mention_name'"}}],'
+                    ;;
+                "tag")
+                    final_message="<at>$mention_name</at> $MESSAGE"
+                    mention_entities='"entities": [{"type": "mention", "text": "<at>'$mention_name'</at>", "mentioned": {"id": "'$mention_id'", "name": "'$mention_name'"}}],'
+                    ;;
+                "channel")
+                    final_message="<at>$mention_name</at> $MESSAGE"
+                    mention_entities='"entities": [{"type": "mention", "text": "<at>'$mention_name'</at>", "mentioned": {"id": "'$mention_id'", "displayName": "'$mention_name'", "conversationIdentityType": "channel", "conversationIdentityType@odata.type": "#Microsoft.Teams.GraphSvc.conversationIdentityType"}}],'
+                    ;;
+            esac
+        else
+            # Simple names for everyone/channel
+            case "$(echo "$MENTION_USER" | tr '[:upper:]' '[:lower:]')" in
+                "everyone"|"@everyone")
+                    final_message="<at>everyone</at> $MESSAGE"
+                    mention_entities='"entities": [{"type": "mention", "text": "<at>everyone</at>", "mentioned": {"id": "everyone", "name": "everyone"}}],'
+                    ;;
+                "channel"|"@channel")
+                    final_message="<at>channel</at> $MESSAGE"
+                    mention_entities='"entities": [{"type": "mention", "text": "<at>channel</at>", "mentioned": {"id": "channel", "name": "channel"}}],'
+                    ;;
+                *)
+                    # Default tag format
+                    final_message="<at>$MENTION_USER</at> $MESSAGE"
+                    mention_entities='"entities": [{"type": "mention", "text": "<at>'$MENTION_USER'</at>", "mentioned": {"id": "TAG_ID_'$MENTION_USER'", "name": "'$MENTION_USER'"}}],'
+                    ;;
+            esac
+        fi
+    fi
+    
+    message_escaped=$(escape_json "$final_message")
+    local color
+    color=$(get_theme_color)
+    
+    # Build facts JSON step by step
+    local facts_json='{"title": "Status", "value": "'$STATUS'"}'
+    
+    if [[ -n "${CREATOR:-}" ]]; then
+        facts_json="$facts_json, {\"title\": \"Triggered by\", \"value\": \"$CREATOR\"}"
+    fi
+    
+    if [[ -n "${REPO_NAME:-}" ]]; then
+        facts_json="$facts_json, {\"title\": \"Repository\", \"value\": \"$REPO_NAME\"}"
+    fi
+    
+    if [[ -n "${WORKFLOW_URL:-}" ]]; then
+        facts_json="$facts_json, {\"title\": \"Workflow\", \"value\": \"$WORKFLOW_URL\"}"
+    fi
+    
+    # Build actions - prioritize workflow URL, then custom URL
+    local actions=""
+    local action_url=""
+    
+    if [[ -n "${WORKFLOW_URL:-}" ]]; then
+        action_url="$WORKFLOW_URL"
+    elif [[ -n "${URL:-}" ]]; then
+        action_url="$URL"
+    fi
+    
+    if [[ -n "$action_url" ]]; then
+        local url_escaped
+        url_escaped=$(escape_json "$action_url")
+        actions=',
+                {
+                    "type": "ActionSet",
+                    "actions": [
+                        {
+                            "type": "Action.OpenUrl",
+                            "title": "View Workflow",
+                            "url": "'$url_escaped'"
+                        }
+                    ]
+                }'
+    fi
+
+    cat <<EOF
+{
+    "type": "message",
+    "attachments": [{
+        "contentType": "application/vnd.microsoft.card.adaptive",
+        "content": {
+            "\$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+            "type": "AdaptiveCard",
+            "version": "1.4",
+            "body": [
+                {
+                    "type": "Container",
+                    "style": "accent",
+                    "items": [
+                        {
+                            "type": "TextBlock",
+                            "text": "$title_escaped",
+                            "weight": "Bolder",
+                            "size": "Large",
+                            "color": "Dark"
+                        }
+                    ]
+                },
+                {
+                    "type": "TextBlock",
+                    "text": "$message_escaped",
+                    "wrap": true,
+                    "spacing": "Medium"
+                },
+                {
+                    "type": "FactSet",
+                    "facts": [$facts_json],
+                    "spacing": "Medium"
+                }$actions
+            ],
+            "msteams": {
+                $mention_entities
+                "width": "Full"
+            }
+        }
+    }]
+}
+EOF
+}
+
+# Main execution
+echo "::notice::Sending MS Teams notification..."
+
+payload=$(build_payload)
+
+if [[ "$DRY_RUN" == "true" ]]; then
+    echo "::notice::Dry run mode - payload that would be sent:"
+    echo "$payload"
+    exit 0
+fi
+
+# Send notification
+http_response=$(curl -s -o /dev/null -w "%{http_code}" \
+    -H "Content-Type: application/json" \
+    -d "$payload" \
+    "$TEAMS_WEBHOOK_URL")
+
+if [[ "$http_response" -ge 200 ]] && [[ "$http_response" -lt 300 ]]; then
+    echo "::notice::Notification sent successfully to Microsoft Teams"
+else
+    echo "::error::Failed to send notification. HTTP status: $http_response"
+    exit 1
+fi
