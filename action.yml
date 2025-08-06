@@ -1,6 +1,6 @@
 name: 'MS Teams Notification'
 description: 'Send notifications to Microsoft Teams channels from GitHub Actions'
-author: 'DevLuchOps'
+author: 'Luis Alberto Valencia Avellaneda'
 branding:
   icon: 'message-circle'
   color: 'blue'
