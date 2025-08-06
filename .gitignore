@@ -21,3 +21,8 @@ Thumbs.db
 
 # OpenCode internal files
 .opencode/
+
+# Shell scripts (development only)
+test-local.sh
+send-notification.sh
+*.test.sh
