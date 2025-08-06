@@ -230,16 +230,16 @@ mention_user: '8:orgid:12345678-1234-1234-1234-123456789abc|John Doe'
 
 ### Local Testing
 
-1. Copy the example environment file:
-```bash
-cp .env.example .env
-```
+Since the action runs directly in GitHub Actions, you can test it using dry-run mode:
 
-2. Edit `.env` with your Teams webhook URL and test configuration
-
-3. Run the test script:
-```bash
-./test-local.sh
+```yaml
+- name: Test Notification
+  uses: DevLuchOps/ms-teams-notification-action@v1
+  with:
+    webhook_url: ${{ secrets.MS_TEAMS_WEBHOOK_URL }}
+    title: 'Test'
+    message: 'Testing notification'
+    dry_run: 'true'  # This will only show the payload without sending
 ```
 
 ### GitHub Actions Testing
