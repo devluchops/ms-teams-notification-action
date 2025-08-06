@@ -1,6 +1,6 @@
-# MS Teams Notification
+# Custom MS Teams Notification Action
 
-[![GitHub marketplace](https://img.shields.io/badge/marketplace-ms--teams--notification-blue?logo=github)](https://github.com/marketplace/actions/ms-teams-notification)
+[![GitHub marketplace](https://img.shields.io/badge/marketplace-custom--ms--teams--notification--action-blue?logo=github)](https://github.com/marketplace/actions/custom-ms-teams-notification-action)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Send notifications to Microsoft Teams channels from your GitHub Actions workflows.
